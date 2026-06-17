@@ -3,7 +3,8 @@ WORKDIR /src
 COPY ["BillingERP.Web.csproj", "."]
 RUN dotnet restore "./BillingERP.Web.csproj"
 COPY . .
-RUN dotnet publish "BillingERP.Web.csproj" -c Release -o /app/publish
+# पुरानी लाइन की जगह इसे डालें
+RUN dotnet publish -c Release -o out -r linux-x64 --self-contained true /p:PublishReadyToRun=true
 
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS final
 WORKDIR /app
