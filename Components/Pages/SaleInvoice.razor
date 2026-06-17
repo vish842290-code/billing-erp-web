@@ -188,7 +188,7 @@
     private double grandProfit => invoiceItems.Sum(i => i.ItemProfit);
 
     private string message = "";
-    private string connectionString = "Server=db.frhqmjirwjokopemtjol.supabase.co;Port=5432;Database=postgres;User Id=postgres;Password=aA1@VISHAL12;";
+    private string connectionString = "Server=aws-1-ap-south-1.pooler.supabase.com;Port=6543;Database=postgres;User Id=postgres.frhqmjirwjokopemtjol;Password=aA1@VISHAL12;SslMode=Require;TrustServerCertificate=True;";
 
     protected override async Task OnInitializedAsync()
     {
