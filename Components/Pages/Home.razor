@@ -1,7 +1,61 @@
 ﻿@page "/"
+@rendermode InteractiveServer
 
-<PageTitle>Home</PageTitle>
+<div style="font-family: Arial, sans-serif; padding: 20px; max-width: 1200px; margin: auto;">
+    
+    <div style="background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%); color: white; padding: 30px; border-radius: 10px; margin-bottom: 30px; text-align: center; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+        <h1 style="margin: 0; font-size: 32px; font-weight: bold;">📊 Billing & ERP Dashboard</h1>
+        <p style="margin: 10px 0 0 0; font-size: 16px; opacity: 0.9;">आपके व्यापार को आसान और डिजिटल बनाने का वन-स्टॉप सॉफ्टवेयर।</p>
+    </div>
 
-<h1>Hello, world!</h1>
+    <h3 style="margin-bottom: 20px; color: #333; font-weight: bold;">Quick Actions (मुख्य मेनू)</h3>
+    
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; margin-bottom: 40px;">
+        
+        <a href="saleinvoice" style="text-decoration: none; color: inherit;">
+            <div style="background: #e3f2fd; border: 1px solid #90caf9; padding: 25px; border-radius: 8px; text-align: center; cursor: pointer; transition: transform 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05);" 
+                 onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 40px; margin-bottom: 10px;">➕</div>
+                <h4 style="margin: 0; color: #0d47a1; font-weight: bold;">New Sale Bill</h4>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #555;">नया बॉक्स/पीस बिक्री बिल बनाएं</p>
+            </div>
+        </a>
 
-Welcome to your new app.
+        <a href="invoicelist" style="text-decoration: none; color: inherit;">
+            <div style="background: #e8f5e9; border: 1px solid #a5d6a7; padding: 25px; border-radius: 8px; text-align: center; cursor: pointer; transition: transform 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05);"
+                 onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 40px; margin-bottom: 10px;">📄</div>
+                <h4 style="margin: 0; color: #1b5e20; font-weight: bold;">Invoice History</h4>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #555;">पुराने बिल देखें और प्रिंट निकालें</p>
+            </div>
+        </a>
+
+        <a href="itemlist" style="text-decoration: none; color: inherit;">
+            <div style="background: #fff3e0; border: 1px solid #ffcc80; padding: 25px; border-radius: 8px; text-align: center; cursor: pointer; transition: transform 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05);"
+                 onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 40px; margin-bottom: 10px;">📦</div>
+                <h4 style="margin: 0; color: #e65100; font-weight: bold;">Product Stock</h4>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #555;">सामान की लिस्ट और लाइव स्टॉक ट्रैक करें</p>
+            </div>
+        </a>
+
+        <a href="partylist" style="text-decoration: none; color: inherit;">
+            <div style="background: #f3e5f5; border: 1px solid #ce93d8; padding: 25px; border-radius: 8px; text-align: center; cursor: pointer; transition: transform 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05);"
+                 onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 40px; margin-bottom: 10px;">👥</div>
+                <h4 style="margin: 0; color: #4a148c; font-weight: bold;">Customer Parties</h4>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #555;">कस्टमर और व्यापारियों के खाते जोड़ें</p>
+            </div>
+        </a>
+
+        <a href="settings" style="text-decoration: none; color: inherit;">
+            <div style="background: #eceff1; border: 1px solid #b0bec5; padding: 25px; border-radius: 8px; text-align: center; cursor: pointer; transition: transform 0.2s; box-shadow: 0 2px 5px rgba(0,0,0,0.05);"
+                 onmouseover="this.style.transform='scale(1.03)'" onmouseout="this.style.transform='scale(1)'">
+                <div style="font-size: 40px; margin-bottom: 10px;">⚙️</div>
+                <h4 style="margin: 0; color: #37474f; font-weight: bold;">Firm Settings</h4>
+                <p style="margin: 5px 0 0 0; font-size: 13px; color: #555;">दुकान का नाम, पता और मोबाइल बदलें</p>
+            </div>
+        </a>
+
+    </div>
+</div>
