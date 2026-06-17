@@ -74,13 +74,7 @@
         await conn.OpenAsync();
         
         // चेक करें कि टेबल में नए कॉलम हैं या नहीं, नहीं तो बना दें (Auto Migration)
-        using (var cmdAlter = new NpgsqlCommand(@"
-            ALTER TABLE parties ADD COLUMN IF NOT EXISTS mobile TEXT;
-            ALTER TABLE parties ADD COLUMN IF NOT EXISTS gstin TEXT;
-            ALTER TABLE parties ADD COLUMN IF NOT EXISTS address TEXT;", conn))
-        {
-            await cmdAlter.ExecuteNonQueryAsync();
-        }
+        
 
         using var cmd = new NpgsqlCommand("SELECT id, name, mobile, gstin, address FROM parties ORDER BY name ASC", conn);
         using var reader = await cmd.ExecuteReaderAsync();

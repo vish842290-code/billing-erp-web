@@ -206,6 +206,7 @@ else
             using var conn = new NpgsqlConnection(connectionString);
             await conn.OpenAsync();
 
+            // कॉलम का नाम और क्रम एकदम सटीक कर दिया है
             string query = @"
                 SELECT i.id, i.invoicenumber, i.invoicedate, p.name, i.totalamount, i.paidamount 
                 FROM invoices i
@@ -219,17 +220,20 @@ else
                 invoices.Add(new InvoiceDisplay
                 {
                     Id = reader.GetInt32(0),
+                    // IsDBNull चेक के साथ ताकि खाली वैल्यू पर पेज क्रैश न हो
                     InvoiceNumber = reader.IsDBNull(1) ? "" : reader.GetString(1),
                     InvoiceDate = reader.IsDBNull(2) ? DateTime.Now : reader.GetDateTime(2),
                     PartyName = reader.IsDBNull(3) ? "Unknown Customer" : reader.GetString(3),
-                    TotalAmount = reader.IsDBNull(4) ? 0 : reader.GetDouble(4),
-                    PaidAmount = reader.IsDBNull(5) ? 0 : reader.GetDouble(5)
+                    TotalAmount = reader.IsDBNull(4) ? 0 : Convert.ToDouble(reader.GetDecimal(4)),
+                    PaidAmount = reader.IsDBNull(5) ? 0 : Convert.ToDouble(reader.GetDecimal(5))
                 });
             }
         }
-        catch (Exception ex) { errorMessage = "Load Error: " + ex.Message; }
+        catch (Exception ex) 
+        { 
+            errorMessage = "Load Error: " + ex.Message; 
+        }
     }
-
     private async Task OpenPrintView(InvoiceDisplay inv)
     {
         currentPrintInvoice = inv;

@@ -80,10 +80,7 @@
         using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
         
-        using (var cmdAlter = new NpgsqlCommand("ALTER TABLE items ADD COLUMN IF NOT EXISTS purchase_price NUMERIC DEFAULT 0;", conn))
-        {
-            await cmdAlter.ExecuteNonQueryAsync();
-        }
+        
 
         using var cmd = new NpgsqlCommand("SELECT id, name, stock, price, purchase_price FROM items ORDER BY name ASC", conn);
         using var reader = await cmd.ExecuteReaderAsync();
