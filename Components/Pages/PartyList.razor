@@ -1,128 +1,118 @@
 @page "/partylist"
-@rendermode InteractiveServer
 @using Npgsql
+@rendermode InteractiveServer
 
-<h3>Party Management</h3>
+<div style="padding: 20px; max-width: 1000px; margin: auto; font-family: Arial, sans-serif;">
+    <h2 style="color: #4a148c; border-bottom: 2px solid #ce93d8; padding-bottom: 10px;">👥 Customer & Party Management</h2>
 
-<div style="background: #f3f3f3; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
-    <h4>Add New Party</h4>
-    <div class="form-group" style="margin-bottom: 10px;">
-        <label>Party Name:</label>
-        <input type="text" class="form-control" @bind="newPartyName" placeholder="पार्टी का नाम लिखें..." />
+    <!-- नया पार्टी जोड़ने का फॉर्म -->
+    <div style="background: #f3e5f5; padding: 20px; border-radius: 8px; margin-bottom: 30px; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
+        <h4 style="margin-top: 0; color: #4a148c;">➕ Add New Party / Customer</h4>
+        <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+            <div>
+                <label>Party Name *</label>
+                <input @bind="newPartyName" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;" placeholder="फर्म या ग्राहक का नाम" />
+            </div>
+            <div>
+                <label>Mobile No.</label>
+                <input @bind="newMobile" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;" placeholder="10 अंकों का नंबर" maxlength="10" />
+            </div>
+            <div>
+                <label>GSTIN (Optional)</label>
+                <input @bind="newGst" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;" placeholder="09AAAAA0000A1Z5" maxlength="15" />
+            </div>
+            <div>
+                <label>Address</label>
+                <input @bind="newAddress" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ccc;" placeholder="पूरा पता" />
+            </div>
+        </div>
+        <button @onclick="SaveParty" style="background: #4a148c; color: white; border: none; padding: 10px 20px; border-radius: 4px; margin-top: 15px; cursor: pointer; font-weight: bold;">Save Party</button>
+        @if (!string.IsNullOrEmpty(msg)) { <p style="color: green; margin-top: 10px;">@msg</p> }
     </div>
-    <button class="btn btn-primary" @onclick="InsertParty">Save Party</button>
-</div>
 
-<h4>All Parties</h4>
-@if (parties == null)
-{
-    <p><em>डेटा लोड हो रहा है...</em></p>
-}
-else if (parties.Count == 0)
-{
-    <p>कोई पार्टी नहीं मिली। कृपया नई पार्टी जोड़ें।</p>
-}
-else
-{
-    <table class="table" border="1" cellpadding="5" style="border-collapse: collapse; width: 100%;">
+    <!-- पार्टियों की लिस्ट टेबल -->
+    <h4 style="color: #333;">Registered Parties List</h4>
+    <table style="width: 100%; border-collapse: collapse; margin-top: 10px; background: white; box-shadow: 0 2px 5px rgba(0,0,0,0.05);">
         <thead>
-            <tr style="background-color: #ddd;">
-                <th>ID</th>
-                <th>Party Name</th>
+            <tr style="background: #4a148c; color: white; text-align: left;">
+                <th style="padding: 12px; border: 1px solid #ddd;">Party Name</th>
+                <th style="padding: 12px; border: 1px solid #ddd;">Mobile No.</th>
+                <th style="padding: 12px; border: 1px solid #ddd;">GSTIN</th>
+                <th style="padding: 12px; border: 1px solid #ddd;">Address</th>
             </tr>
         </thead>
         <tbody>
             @foreach (var party in parties)
             {
-                <tr>
-                    <td>@party.Id</td>
-                    <td>@party.Name</td>
+                <tr style="border-bottom: 1px solid #ddd;">
+                    <td style="padding: 12px; border: 1px solid #ddd; font-weight: bold;">@party.Name</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">@(string.IsNullOrEmpty(party.Mobile) ? "-" : party.Mobile)</td>
+                    <td style="padding: 12px; border: 1px solid #ddd; color: #0d47a1; font-family: monospace;">@(string.IsNullOrEmpty(party.Gst) ? "-" : party.Gst.ToUpper())</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">@(string.IsNullOrEmpty(party.Address) ? "-" : party.Address)</td>
                 </tr>
             }
         </tbody>
     </table>
-}
-
-@if (!string.IsNullOrEmpty(errorMessage))
-{
-    <div style="color: red; font-weight: bold; margin-top: 10px;">
-        @errorMessage
-    </div>
-}
+</div>
 
 @code {
-    public class Party
+    private string connectionString = "Server=aws-1-ap-south-1.pooler.supabase.com;Port=6543;Database=postgres;User Id=postgres.frhqmjirwjokopemtjol;Password=aA1@VISHAL12;SslMode=Require;TrustServerCertificate=True;";
+    
+    private string newPartyName = "";
+    private string newMobile = "";
+    private string newGst = "";
+    private string newAddress = "";
+    private string msg = "";
+    private List<PartyModel> parties = new();
+
+    protected override async Task OnInitializedAsync() { await LoadParties(); }
+
+    private async Task LoadParties()
     {
-        public int Id { get; set; }
-        public string Name { get; set; }="";
+        parties.Clear();
+        using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync();
+        
+        // चेक करें कि टेबल में नए कॉलम हैं या नहीं, नहीं तो बना दें (Auto Migration)
+        using (var cmdAlter = new NpgsqlCommand(@"
+            ALTER TABLE parties ADD COLUMN IF NOT EXISTS mobile TEXT;
+            ALTER TABLE parties ADD COLUMN IF NOT EXISTS gstin TEXT;
+            ALTER TABLE parties ADD COLUMN IF NOT EXISTS address TEXT;", conn))
+        {
+            await cmdAlter.ExecuteNonQueryAsync();
+        }
+
+        using var cmd = new NpgsqlCommand("SELECT id, name, mobile, gstin, address FROM parties ORDER BY name ASC", conn);
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            parties.Add(new PartyModel {
+                Id = reader.GetInt32(0),
+                Name = reader.GetString(1),
+                Mobile = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                Gst = reader.IsDBNull(3) ? "" : reader.GetString(3),
+                Address = reader.IsDBNull(4) ? "" : reader.GetString(4)
+            });
+        }
     }
 
-    private List<Party>? parties;
-    private string? errorMessage;
-    private string newPartyName = "";
-
-    private string connectionString = "Server=db.frhqmjirwjokopemtjol.supabase.co;Port=5432;Database=postgres;User Id=postgres;Password=aA1@VISHAL12;";
-
-    protected override async Task OnInitializedAsync()
+    private async Task SaveParty()
     {
+        if (string.IsNullOrWhiteSpace(newPartyName)) { msg = "कृपया नाम ज़रूर डालें!"; return; }
+        
+        using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync();
+        using var cmd = new NpgsqlCommand("INSERT INTO parties (name, mobile, gstin, address) VALUES (@name, @mobile, @gst, @address)", conn);
+        cmd.Parameters.AddWithValue("@name", newPartyName.Trim());
+        cmd.Parameters.AddWithValue("@mobile", newMobile.Trim());
+        cmd.Parameters.AddWithValue("@gst", newGst.Trim().ToUpper());
+        cmd.Parameters.AddWithValue("@address", newAddress.Trim());
+        
+        await cmd.ExecuteNonQueryAsync();
+        msg = "पार्टी की जानकारी सफलतापूर्वक सुरक्षित हो गई!";
+        newPartyName = ""; newMobile = ""; newGst = ""; newAddress = "";
         await LoadParties();
     }
 
-    // 1. डेटा लोड करने का फंक्शन
-    private async Task LoadParties()
-    {
-        try
-        {
-            parties = new List<Party>();
-            using var conn = new NpgsqlConnection(connectionString);
-            await conn.OpenAsync();
-
-            // ध्यान दें: यहाँ 'parties' लिखा है क्योंकि इसी से आपका एरर हटा था
-            using var cmd = new NpgsqlCommand("SELECT id, name FROM parties ORDER BY id DESC", conn);
-            using var reader = await cmd.ExecuteReaderAsync();
-
-            while (await reader.ReadAsync())
-            {
-                parties.Add(new Party
-                {
-                    Id = reader.GetInt32(0),
-                    Name = reader.GetString(1)
-                });
-            }
-            errorMessage = ""; // पुराना एरर साफ़ करने के लिए
-        }
-        catch (Exception ex)
-        {
-            errorMessage = "Load Error: " + ex.Message;
-        }
-    }
-
-    // 2. नया डेटा डालने का फंक्शन
-    private async Task InsertParty()
-    {
-        if (string.IsNullOrWhiteSpace(newPartyName))
-        {
-            errorMessage = "कृपया पार्टी का नाम खाली न छोड़ें!";
-            return;
-        }
-
-        try
-        {
-            using var conn = new NpgsqlConnection(connectionString);
-            await conn.OpenAsync();
-
-            // डेटाबेस में नाम इन्सर्ट करने की क्वेरी
-            using var cmd = new NpgsqlCommand("INSERT INTO parties (\"name\") VALUES (@name)", conn);
-            cmd.Parameters.AddWithValue("@name", newPartyName);
-            await cmd.ExecuteNonQueryAsync();
-
-            // इनपुट बॉक्स खाली करें और लिस्ट दोबारा लोड करें
-            newPartyName = "";
-            await LoadParties();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = "Insert Error: " + ex.Message;
-        }
-    }
+    public class PartyModel { public int Id { get; set; } public string Name { get; set; } = ""; public string Mobile { get; set; } = ""; public string Gst { get; set; } = ""; public string Address { get; set; } = ""; }
 }
