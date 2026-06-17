@@ -1,0 +1,275 @@
+@page "/invoicelist"
+@rendermode InteractiveServer
+@using Npgsql
+
+@if (!showPrintView)
+{
+    <h3>Sales Invoice History (बिक्री बिलों की सूची)</h3>
+
+    @if (invoices == null)
+    {
+        <p><em>डेटाबेस से बिलों का इतिहास लोड किया जा रहा है...</em></p>
+    }
+    else if (invoices.Count == 0)
+    {
+        <p>अभी तक कोई बिल नहीं बनाया गया है।</p>
+    }
+    else
+    {
+        <table class="table" border="1" cellpadding="5" style="border-collapse: collapse; width: 100%; text-align: left;">
+            <thead>
+                <tr style="background-color: #f2f2f2;">
+                    <th>Invoice No.</th>
+                    <th>Date</th>
+                    <th>Customer Name</th>
+                    <th>Total Amount</th>
+                    <th>Paid Amount</th>
+                    <th>Balance</th>
+                    <th>Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var inv in invoices)
+                {
+                    <tr>
+                        <td style="font-weight: bold; color: blue;">@inv.InvoiceNumber</td>
+                        <td>@inv.InvoiceDate.ToString("dd-MM-yyyy")</td>
+                        <td>@inv.PartyName</td>
+                        <td style="font-weight: bold;">₹@inv.TotalAmount.ToString("F2")</td>
+                        <td style="color: green;">₹@inv.PaidAmount.ToString("F2")</td>
+                        <td style="color: @(inv.TotalAmount - inv.PaidAmount > 0 ? "red" : "black")">
+                            ₹@((inv.TotalAmount - inv.PaidAmount).ToString("F2"))
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-primary" @onclick="() => OpenPrintView(inv)">📄 Print Bill</button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+}
+else
+{
+    <div id="print-area" style="font-family: Arial, sans-serif; padding: 20px; max-width: 800px; margin: auto; border: 1px solid #ccc; background: white;">
+        
+        <!-- दुकान/फर्म का नाम (डायनेमिक हेडर जो सेटिंग्स से लोड होता है) -->
+        <div style="text-align: center; margin-bottom: 20px;">
+            <h2 style="margin: 0; text-transform: uppercase;">GST INVOICE</h2>
+            <h1 style="margin: 5px 0 0 0; color: #111; font-size: 26px; font-weight: bold;">@savedFirmName</h1>
+            <p style="margin: 4px 0; font-size: 14px;">@savedAddress</p>
+            <p style="margin: 2px 0; font-size: 14px;">मोबाइल: @savedMobile | GSTIN: @savedGstin</p>
+        </div>
+
+        <hr style="border: 1px solid #000;" />
+
+        <table style="width: 100%; margin-top: 15px; font-size: 15px; line-height: 1.6;">
+            <tr>
+                <td style="width: 50%;">
+                    <strong>Billed To (ग्राहक):</strong><br />
+                    Name: @currentPrintInvoice?.PartyName<br />
+                    Address: भदोही, उत्तर प्रदेश
+                </td>
+                <td style="width: 50%; text-align: right; vertical-align: top;">
+                    <strong>Invoice Details:</strong><br />
+                    Invoice No: <strong>@currentPrintInvoice?.InvoiceNumber</strong><br />
+                    Date: @currentPrintInvoice?.InvoiceDate.ToString("dd-MM-yyyy")
+                </td>
+            </tr>
+        </table>
+
+        <table border="1" cellpadding="6" style="border-collapse: collapse; width: 100%; margin-top: 20px; text-align: left; font-size: 14px;">
+            <thead>
+                <tr style="background-color: #eee;">
+                    <th>S.No</th>
+                    <th>Product Name</th>
+                    <th style="text-align: right;">Rate/Pc</th>
+                    <th style="text-align: center;">Qty (Pcs)</th>
+                    <th style="text-align: right;">Total (₹)</th>
+                </tr>
+            </thead>
+            <tbody>
+                @if (printItems != null)
+                {
+                    int sno = 1;
+                    @foreach (var item in printItems)
+                    {
+                        <tr>
+                            <td>@(sno++)</td>
+                            <td style="font-weight: bold;">@item.ProductName</td>
+                            <td style="text-align: right;">₹@item.Rate.ToString("F2")</td>
+                            <td style="text-align: center;">@item.Quantity Pcs</td>
+                            <td style="text-align: right;">₹@item.TotalAmount.ToString("F2")</td>
+                        </tr>
+                    }
+                }
+            </tbody>
+        </table>
+
+        <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+            <div style="font-size: 14px; line-height: 1.6;">
+                <strong>Terms & Conditions:</strong><br />
+                1. बिका हुआ माल वापस नहीं होगा।<br />
+                2. किसी भी विवाद का निपटारा भदोही न्यायालय में होगा।
+            </div>
+            <div style="text-align: right; font-size: 16px; font-weight: bold; width: 250px;">
+                <div style="border-bottom: 1px dashed #ccc; padding: 5px 0;">Grand Total: ₹@currentPrintInvoice?.TotalAmount.ToString("F2")</div>
+                <div style="border-bottom: 1px dashed #ccc; padding: 5px 0; color: green;">Paid Amt: ₹@currentPrintInvoice?.PaidAmount.ToString("F2")</div>
+                <div style="padding: 5px 0; color: red;">Due Amt: ₹@((currentPrintInvoice?.TotalAmount - currentPrintInvoice?.PaidAmount)?.ToString("F2"))</div>
+                <br /><br /><br />
+                <span style="font-size:12px; font-weight:normal;">Authorized Signatory</span>
+            </div>
+        </div>
+
+        <div class="no-print" style="margin-top: 30px; text-align: center; background: #eee; padding: 10px; border-radius: 5px;">
+            <button class="btn btn-success" style="font-size:16px; padding: 8px 25px; margin-right: 10px;" onclick="window.print()">🖨️ Confirm Print (प्रिंट करें)</button>
+            <button class="btn btn-secondary" style="font-size:16px; padding: 8px 25px;" @onclick="ClosePrintView">❌ Close (वापस जाएं)</button>
+        </div>
+    </div>
+
+    <style>
+        @@media print {
+            .no-print { display: none !important; }
+            body { background: white; color: black; }
+            #print-area { border: none !important; padding: 0 !important; }
+        }
+    </style>
+}
+
+@code {
+    public class InvoiceDisplay
+    {
+        public int Id { get; set; }
+        public string InvoiceNumber { get; set; } = "";
+        public DateTime InvoiceDate { get; set; }
+        public string PartyName { get; set; } = "";
+        public double TotalAmount { get; set; }
+        public double PaidAmount { get; set; }
+    }
+
+    public class PrintItem
+    {
+        public string ProductName { get; set; } = "";
+        public double Quantity { get; set; }
+        public double Rate { get; set; }
+        public double TotalAmount { get; set; }
+    }
+
+    private List<InvoiceDisplay>? invoices;
+    private List<PrintItem>? printItems;
+    
+    private bool showPrintView = false;
+    private InvoiceDisplay? currentPrintInvoice;
+    
+    // फर्म सेटिंग्स के लिए डायनेमिक वेरिएबल्स
+    private string savedFirmName = "My Store";
+    private string savedAddress = "";
+    private string savedMobile = "";
+    private string savedGstin = "";
+
+    private string? errorMessage;
+    private string connectionString = "Server=db.frhqmjirwjokopemtjol.supabase.co;Port=5432;Database=postgres;User Id=postgres;Password=aA1@VISHAL12;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadFirmSettings(); // पहले डेटाबेस से फर्म का नाम लोड करेगा
+        await LoadInvoices();     // फिर इनवॉइस की लिस्ट लोड करेगा
+    }
+
+    // डेटाबेस से फर्म की सेटिंग्स खींचने का फंक्शन
+    private async Task LoadFirmSettings()
+    {
+        try
+        {
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+            using var cmd = new NpgsqlCommand("SELECT firm_name, address, mobile, gstin FROM firm_settings WHERE id = 1", conn);
+            using var rdr = await cmd.ExecuteReaderAsync();
+            if (await rdr.ReadAsync())
+            {
+                savedFirmName = rdr.IsDBNull(0) ? "My Store" : rdr.GetString(0);
+                savedAddress = rdr.IsDBNull(1) ? "" : rdr.GetString(1);
+                savedMobile = rdr.IsDBNull(2) ? "" : rdr.GetString(2);
+                savedGstin = rdr.IsDBNull(3) ? "" : rdr.GetString(3);
+            }
+        }
+        catch { 
+            // अगर टेबल न मिले या कोई एरर आये तो डिफ़ॉल्ट वैल्यू बनी रहेगी
+        }
+    }
+
+    private async Task LoadInvoices()
+    {
+        try
+        {
+            invoices = new List<InvoiceDisplay>();
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            string query = @"
+                SELECT i.id, i.invoicenumber, i.invoicedate, p.name, i.totalamount, i.paidamount 
+                FROM invoices i
+                LEFT JOIN parties p ON i.partyid = p.id
+                ORDER BY i.id DESC";
+
+            using var cmd = new NpgsqlCommand(query, conn);
+            using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                invoices.Add(new InvoiceDisplay
+                {
+                    Id = reader.GetInt32(0),
+                    InvoiceNumber = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                    InvoiceDate = reader.IsDBNull(2) ? DateTime.Now : reader.GetDateTime(2),
+                    PartyName = reader.IsDBNull(3) ? "Unknown Customer" : reader.GetString(3),
+                    TotalAmount = reader.IsDBNull(4) ? 0 : reader.GetDouble(4),
+                    PaidAmount = reader.IsDBNull(5) ? 0 : reader.GetDouble(5)
+                });
+            }
+        }
+        catch (Exception ex) { errorMessage = "Load Error: " + ex.Message; }
+    }
+
+    private async Task OpenPrintView(InvoiceDisplay inv)
+    {
+        currentPrintInvoice = inv;
+        printItems = new List<PrintItem>();
+
+        try
+        {
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            string itemQuery = @"
+                SELECT p.name, ii.quantity, ii.rate, ii.totalamount 
+                FROM invoice_items ii
+                INNER JOIN products p ON ii.productid = p.id
+                WHERE ii.invoiceid = @invoiceid";
+
+            using var cmd = new NpgsqlCommand(itemQuery, conn);
+            cmd.Parameters.AddWithValue("@invoiceid", inv.Id);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                printItems.Add(new PrintItem
+                {
+                    ProductName = reader.IsDBNull(0) ? "" : reader.GetString(0),
+                    Quantity = reader.IsDBNull(1) ? 0 : reader.GetDouble(1),
+                    Rate = reader.IsDBNull(2) ? 0 : reader.GetDouble(2),
+                    TotalAmount = reader.IsDBNull(3) ? 0 : reader.GetDouble(3)
+                });
+            }
+
+            showPrintView = true;
+        }
+        catch (Exception ex) { errorMessage = "Print Load Error: " + ex.Message; }
+    }
+
+    private void ClosePrintView()
+    {
+        showPrintView = false;
+        currentPrintInvoice = null;
+        printItems = null;
+    }
+}

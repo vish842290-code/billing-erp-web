@@ -1,0 +1,180 @@
+@page "/itemlist"
+@rendermode InteractiveServer
+@using Npgsql
+
+<h3>Product / Item Management</h3>
+
+<div style="background: #f9f9f9; padding: 15px; margin-bottom: 20px; border-radius: 5px; border: 1px solid #ddd;">
+    <h4>Add New Product</h4>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; margin-bottom: 10px;">
+        <div>
+            <label>Product Name:</label>
+            <input type="text" class="form-control" @bind="newProduct.Name" placeholder="पारले-जी, साबुन आदि..." />
+        </div>
+        <div>
+            <label>HSN Code:</label>
+            <input type="text" class="form-control" @bind="newProduct.HsnCode" />
+        </div>
+        <div>
+            <label>Purchase Price:</label>
+            <input type="number" class="form-control" @bind="newProduct.PurchasePrice" />
+        </div>
+        <div>
+            <label>Sale Rate:</label>
+            <input type="number" class="form-control" @bind="newProduct.Rate" />
+        </div>
+        <div>
+            <label>GST Rate (%):</label>
+            <input type="number" class="form-control" @bind="newProduct.GstRate" />
+        </div>
+        <div>
+            <label>Box Qty:</label>
+            <input type="number" class="form-control" @bind="newProduct.BoxQuantity" />
+        </div>
+        <div>
+            <label>Opening Stock:</label>
+            <input type="number" class="form-control" @bind="newProduct.Stock" />
+        </div>
+    </div>
+    <button class="btn btn-success" @onclick="InsertProduct">Save Product</button>
+</div>
+
+<h4>Stock List</h4>
+@if (products == null)
+{
+    <p><em>डेटाबेस से सीधे कनेक्ट हो रहा है, कृपया प्रतीक्षा करें...</em></p>
+}
+else if (products.Count == 0)
+{
+    <p>स्टॉक में कोई प्रोडक्ट नहीं है।</p>
+}
+else
+{
+    <table class="table" border="1" cellpadding="5" style="border-collapse: collapse; width: 100%; text-align: left;">
+        <thead>
+            <tr style="background-color: #f2f2f2;">
+                <th>ID</th>
+                <th>Product Name</th>
+                <th>HSN</th>
+                <th>P. Price</th>
+                <th>Sale Rate</th>
+                <th>GST %</th>
+                <th>Box Qty</th>
+                <th>Stock</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var prod in products)
+            {
+                <tr>
+                    <td>@prod.Id</td>
+                    <td>@prod.Name</td>
+                    <td>@prod.HsnCode</td>
+                    <td>₹@prod.PurchasePrice</td>
+                    <td>₹@prod.Rate</td>
+                    <td>@prod.GstRate%</td>
+                    <td>@prod.BoxQuantity</td>
+                    <td style="font-weight: bold; color: @(prod.Stock < 5 ? "red" : "green")">@prod.Stock</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div style="color: red; font-weight: bold; margin-top: 10px;">@errorMessage</div>
+}
+
+@code {
+    public class Product
+    {
+        public int Id { get; set; }
+        public string Name { get; set; } = "";
+        public string HsnCode { get; set; } = "";
+        public double PurchasePrice { get; set; }
+        public double Rate { get; set; }
+        public double BoxQuantity { get; set; }
+        public double Stock { get; set; }
+        public double GstRate { get; set; }
+    }
+
+    private List<Product>? products;
+    private Product newProduct = new Product();
+    private string? errorMessage;
+
+    private string connectionString = "Server=db.frhqmjirwjokopemtjol.supabase.co;Port=5432;Database=postgres;User Id=postgres;Password=aA1@VISHAL12;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProducts();
+    }
+
+    private async Task LoadProducts()
+    {
+        try
+        {
+            products = new List<Product>();
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // असली कॉलम्स के नाम यहाँ डाल दिए गए हैं
+            using var cmd = new NpgsqlCommand("SELECT id, name, hsncode, purchaseprice, rate, boxquantity, stock, gstrate FROM products ORDER BY id DESC", conn);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                products.Add(new Product
+                {
+                    Id = reader.GetInt32(0),
+                    Name = reader.IsDBNull(1) ? "" : reader.GetString(1),
+                    HsnCode = reader.IsDBNull(2) ? "" : reader.GetString(2),
+                    PurchasePrice = reader.IsDBNull(3) ? 0 : reader.GetDouble(3),
+                    Rate = reader.IsDBNull(4) ? 0 : reader.GetDouble(4),
+                    BoxQuantity = reader.IsDBNull(5) ? 0 : reader.GetDouble(5),
+                    Stock = reader.IsDBNull(6) ? 0 : reader.GetDouble(6),
+                    GstRate = reader.IsDBNull(7) ? 0 : reader.GetDouble(7)
+                });
+            }
+            errorMessage = "";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Load Error: " + ex.Message;
+        }
+    }
+
+    private async Task InsertProduct()
+    {
+        if (string.IsNullOrWhiteSpace(newProduct.Name))
+        {
+            errorMessage = "आइटम का नाम लिखना ज़रूरी है!";
+            return;
+        }
+
+        try
+        {
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            string query = "INSERT INTO products (\"name\", \"hsncode\", \"purchaseprice\", \"rate\", \"boxquantity\", \"stock\", \"gstrate\") VALUES (@name, @hsncode, @purchaseprice, @rate, @boxquantity, @stock, @gstrate)";
+            using var cmd = new NpgsqlCommand(query, conn);
+            cmd.Parameters.AddWithValue("@name", newProduct.Name);
+            cmd.Parameters.AddWithValue("@hsncode", newProduct.HsnCode);
+            cmd.Parameters.AddWithValue("@purchaseprice", newProduct.PurchasePrice);
+            cmd.Parameters.AddWithValue("@rate", newProduct.Rate);
+            cmd.Parameters.AddWithValue("@boxquantity", newProduct.BoxQuantity);
+            cmd.Parameters.AddWithValue("@stock", newProduct.Stock);
+            cmd.Parameters.AddWithValue("@gstrate", newProduct.GstRate);
+            
+            await cmd.ExecuteNonQueryAsync();
+
+            newProduct = new Product(); // फॉर्म रीसेट
+            await LoadProducts(); // लिस्ट रिफ्रेश
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Insert Error: " + ex.Message;
+        }
+    }
+}

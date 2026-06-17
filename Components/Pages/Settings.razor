@@ -1,0 +1,106 @@
+@page "/settings"
+@rendermode InteractiveServer
+@using Npgsql
+
+<h3>Firm Settings (दुकान की जानकारी)</h3>
+<p>यहाँ जो भी जानकारी आप सेव करेंगे, वही बिल के प्रिंट पर छपकर आएगी।</p>
+
+@if (loading)
+{
+    <p><em>सेटिंग्स लोड हो रही हैं...</em></p>
+}
+else
+{
+    <div style="background: #f9f9f9; padding: 20px; max-width: 600px; border-radius: 5px; border: 1px solid #ddd;">
+        <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Firm / Company Name (दुकान का नाम):</label>
+            <input type="text" class="form-control" @bind="firmName" placeholder="उदा: उपाध्याय ट्रेडर्स" />
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Address (पता):</label>
+            <textarea class="form-control" @bind="address" rows="3" placeholder="उदा: चौरी बाज़ार, परसीपुर, भदोही"></textarea>
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">Mobile Number (मोबाइल):</label>
+            <input type="text" class="form-control" @bind="mobile" placeholder="उदा: 9876543210" />
+        </div>
+
+        <div style="margin-bottom: 15px;">
+            <label style="font-weight: bold;">GSTIN (जीएसटी नंबर - यदि हो):</label>
+            <input type="text" class="form-control" @bind="gstin" placeholder="उदा: 09ABCDE1234F1Z5" />
+        </div>
+
+        <button class="btn btn-success" style="padding: 10px 25px; font-size: 16px;" @onclick="SaveSettings">💾 Save Settings (सेव करें)</button>
+    </div>
+}
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div style="margin-top:15px; padding:10px; font-weight:bold; color:green; background:#dfd; max-width:600px; border-radius:5px;">
+        @message
+    </div>
+}
+
+@code {
+    private string firmName = "";
+    private string address = "";
+    private string mobile = "";
+    private string gstin = "";
+    
+    private bool loading = true;
+    private string message = "";
+    private string connectionString = "Server=db.frhqmjirwjokopemtjol.supabase.co;Port=5432;Database=postgres;User Id=postgres;Password=aA1@VISHAL12;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadSettings();
+    }
+
+    private async Task LoadSettings()
+    {
+        try
+        {
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            using var cmd = new NpgsqlCommand("SELECT firm_name, address, mobile, gstin FROM firm_settings WHERE id = 1", conn);
+            using var rdr = await cmd.ExecuteReaderAsync();
+            if (await rdr.ReadAsync())
+            {
+                firmName = rdr.IsDBNull(0) ? "" : rdr.GetString(0);
+                address = rdr.IsDBNull(1) ? "" : rdr.GetString(1);
+                mobile = rdr.IsDBNull(2) ? "" : rdr.GetString(2);
+                gstin = rdr.IsDBNull(3) ? "" : rdr.GetString(3);
+            }
+        }
+        catch (Exception ex) { message = "Error loading: " + ex.Message; }
+        finally { loading = false; }
+    }
+
+    private async Task SaveSettings()
+    {
+        try
+        {
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            string query = @"
+                INSERT INTO firm_settings (id, firm_name, address, mobile, gstin)
+                VALUES (1, @name, @addr, @mob, @gst)
+                ON CONFLICT (id) 
+                DO UPDATE SET firm_name = @name, address = @addr, mobile = @mob, gstin = @gst;";
+
+            using var cmd = new NpgsqlCommand(query, conn);
+            cmd.Parameters.AddWithValue("@name", firmName);
+            cmd.Parameters.AddWithValue("@addr", address);
+            cmd.Parameters.AddWithValue("@mob", mobile);
+            cmd.Parameters.AddWithValue("@gst", gstin);
+
+            await cmd.ExecuteNonQueryAsync();
+            message = "🎉 फर्म की जानकारी सफलतापूर्वक सेव हो गई है!";
+        }
+        catch (Exception ex) { message = "Error saving: " + ex.Message; }
+    }
+}

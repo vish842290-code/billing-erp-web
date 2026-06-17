@@ -1,0 +1,380 @@
+@page "/saleinvoice"
+@rendermode InteractiveServer
+@using Npgsql
+
+<h3>New Sale Invoice (बिक्री बिल)</h3>
+
+<div style="background: #f9f9f9; padding: 15px; margin-bottom: 20px; border-radius: 5px; border: 1px solid #ddd;">
+    <!-- 1. बिल हेडर डिटेल्स -->
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 15px;">
+        <div>
+            <label style="font-weight: bold;">Select Customer / Party:</label>
+            <select class="form-control" @bind="selectedPartyId">
+                <option value="0">-- कस्टमर चुनें --</option>
+                @if (parties != null)
+                {
+                    @foreach (var party in parties)
+                    {
+                        <option value="@party.Id">@party.Name</option>
+                    }
+                }
+            </select>
+        </div>
+        <div>
+            <label style="font-weight: bold;">Invoice Number:</label>
+            <input type="text" class="form-control" @bind="invoiceNumber" placeholder="उदा: INV-001" />
+        </div>
+        <div>
+            <label style="font-weight: bold;">Paid Amount (जमा राशि):</label>
+            <input type="number" class="form-control" @bind="paidAmount" />
+        </div>
+    </div>
+
+    <hr />
+
+    <!-- 2. आइटम जोड़ने का सेक्शन -->
+    <h4>Add Product to Bill</h4>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 10px;">
+        <div style="grid-column: span 2;">
+            <label>Product:</label>
+            <select class="form-control" @onchange="OnProductSelected">
+                <option value="0">-- प्रोडक्ट चुनें --</option>
+                @if (products != null)
+                {
+                    @foreach (var prod in products)
+                    {
+                        <option value="@prod.Id">@prod.Name (Stock: @prod.Stock Pcs)</option>
+                    }
+                }
+            </select>
+        </div>
+        
+        <div>
+            <label>Single Pc Rate (₹):</label>
+            <input type="number" class="form-control" @bind="currentSingleRate" @bind:after="CalculateTotalInputAmount" />
+        </div>
+
+        <div>
+            <label>Boxes (बॉक्स):</label>
+            <input type="number" class="form-control" @bind="inputBoxes" @bind:after="CalculateTotalInputAmount" min="0" />
+        </div>
+
+        <div>
+            <label>Loose Pcs (पीस):</label>
+            <input type="number" class="form-control" @bind="inputPieces" @bind:after="CalculateTotalInputAmount" min="0" />
+        </div>
+
+        <div>
+            <label>Total Amount (₹):</label>
+            <input type="number" class="form-control" @bind="calculatedItemAmount" disabled style="background-color: #eee; font-weight: bold; color: blue;" />
+        </div>
+
+        <div>
+            <label style="display:block;">&nbsp;</label>
+            <button class="btn btn-primary" style="width: 100%;" @onclick="AddItemToGrid">Add Item</button>
+        </div>
+    </div>
+    
+    @if(selectedProduct != null && selectedProduct.BoxQuantity > 0)
+    {
+        <span style="color: green; font-size: 14px; font-weight: bold;">
+            💡 पैक साइज: 1 बॉक्स = @selectedProduct.BoxQuantity पीस | कुल बिकने वाले पीस: @((inputBoxes * selectedProduct.BoxQuantity) + inputPieces) पीस
+        </span>
+    }
+</div>
+
+<!-- 3. बिल का ग्रिड Table -->
+<h4>Invoice Items</h4>
+<table class="table" border="1" cellpadding="5" style="border-collapse: collapse; width: 100%; text-align: left; margin-bottom: 20px;">
+    <thead>
+        <tr style="background-color: #f2f2f2;">
+            <th>Product Name</th>
+            <th>Sold Qty (Box-Pc)</th>
+            <th>Total Pcs</th>
+            <th>Rate/Pc</th>
+            <th>GST %</th>
+            <th>Taxable</th>
+            <th>GST Amt</th>
+            <th>Total (₹)</th>
+        </tr>
+    </thead>
+    <tbody>
+        @foreach (var item in invoiceItems)
+        {
+            <tr>
+                <td>@item.ProductName</td>
+                <td><span class="badge bg-info text-dark" style="font-size:14px;">@item.Boxes Bx - @item.Pieces Pc</span></td>
+                <td>@item.TotalPieces Pcs</td>
+                <td>₹@item.SingleRate.ToString("F2")</td>
+                <td>@item.GstRate%</td>
+                <td>₹@item.TaxableAmount.ToString("F2")</td>
+                <td>₹@item.GstAmount.ToString("F2")</td>
+                <td>₹@item.TotalAmount.ToString("F2")</td>
+            </tr>
+        }
+    </tbody>
+</table>
+
+<!-- 4. बिल का फाइनल टोटल समरी -->
+<div style="text-align: right; font-size: 18px; font-weight: bold; background: #eef; padding: 15px; border-radius: 5px;">
+    <div>Total Taxable: ₹@grandTaxable.ToString("F2")</div>
+    <div>Total GST: ₹@grandGst.ToString("F2")</div>
+    <div style="font-size: 24px; color: green; margin-top: 5px;">Grand Total: ₹@grandTotal.ToString("F2")</div>
+    <br />
+    <button class="btn btn-success" style="font-size: 20px; padding: 10px 30px;" @onclick="SaveInvoice">Save & Print Bill</button>
+</div>
+
+@if (!string.IsNullOrEmpty(message))
+{
+    <div style="padding:10px; margin-top:10px; font-size:18px; font-weight:bold; border-radius:5px; background-color:@(message.Contains("Error") || message.Contains("कृपया") ? "#fdd" : "#dfd"); color:@(message.Contains("Error") || message.Contains("कृपया") ? "red" : "green")">
+        @message
+    </div>
+}
+
+@code {
+    public class Party { public int Id { get; set; } public string Name { get; set; } = ""; }
+    
+    public class Product 
+    { 
+        public int Id { get; set; } 
+        public string Name { get; set; } = ""; 
+        public double Rate { get; set; } 
+        public double Stock { get; set; } 
+        public double GstRate { get; set; } 
+        public double BoxQuantity { get; set; } 
+        public double PurchasePrice { get; set; } // प्रॉफिट कैलकुलेशन के लिए
+    }
+    
+    public class BillItem
+    {
+        public int ProductId { get; set; }
+        public string ProductName { get; set; } = "";
+        public int Boxes { get; set; }
+        public int Pieces { get; set; }
+        public double BoxQuantity { get; set; }
+        public double SingleRate { get; set; }
+        public double PurchasePrice { get; set; }
+        public double GstRate { get; set; }
+        
+        public double TotalPieces => (Boxes * BoxQuantity) + Pieces;
+        public double TaxableAmount => TotalPieces * SingleRate;
+        public double GstAmount => TaxableAmount * (GstRate / 100);
+        public double TotalAmount => TaxableAmount + GstAmount;
+        
+        // प्रॉफिट = (बिक्री रेट - खरीद रेट) * कुल पीस
+        public double ItemProfit => (SingleRate - PurchasePrice) * TotalPieces;
+    }
+
+    private List<Party>? parties;
+    private List<Product>? products;
+    private List<BillItem> invoiceItems = new List<BillItem>();
+
+    // बिल हेडर वैरिएबल्स
+    private int selectedPartyId = 0;
+    private string invoiceNumber = "";
+    private double paidAmount = 0;
+
+    // आइटम इनपुट वैरिएबल्स
+    private int selectedProductId = 0;
+    private Product? selectedProduct;
+    private double currentSingleRate = 0;
+    private int inputBoxes = 0;
+    private int inputPieces = 0;
+    private double calculatedItemAmount = 0;
+
+    private double grandTaxable => invoiceItems.Sum(i => i.TaxableAmount);
+    private double grandGst => invoiceItems.Sum(i => i.GstAmount);
+    private double grandTotal => invoiceItems.Sum(i => i.TotalAmount);
+    private double grandProfit => invoiceItems.Sum(i => i.ItemProfit);
+
+    private string message = "";
+    private string connectionString = "Server=db.frhqmjirwjokopemtjol.supabase.co;Port=5432;Database=postgres;User Id=postgres;Password=aA1@VISHAL12;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // आज की तारीख के हिसाब से एक रैंडम बिल नंबर डिफ़ॉल्ट सेट कर देते हैं
+        invoiceNumber = "INV-" + DateTime.Now.ToString("ddMMyy-HHmmss");
+        await LoadDropdowns();
+    }
+
+    private async Task LoadDropdowns()
+    {
+        try
+        {
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            parties = new List<Party>();
+            using var cmdParty = new NpgsqlCommand("SELECT id, name FROM parties ORDER BY name", conn);
+            using var rdrParty = await cmdParty.ExecuteReaderAsync();
+            while (await rdrParty.ReadAsync())
+            {
+                parties.Add(new Party { Id = rdrParty.GetInt32(0), Name = rdrParty.GetString(1) });
+            }
+            await rdrParty.CloseAsync();
+
+            products = new List<Product>();
+            // यहाँ हमने प्रॉफिट निकालने के लिए purchaseprice भी लोड कर लिया है
+            using var cmdProd = new NpgsqlCommand("SELECT id, name, rate, stock, gstrate, boxquantity, purchaseprice FROM products ORDER BY name", conn);
+            using var rdrProd = await cmdProd.ExecuteReaderAsync();
+            while (await rdrProd.ReadAsync())
+            {
+                products.Add(new Product { 
+                    Id = rdrProd.GetInt32(0), 
+                    Name = rdrProd.IsDBNull(1) ? "" : rdrProd.GetString(1),
+                    Rate = rdrProd.IsDBNull(2) ? 0 : rdrProd.GetDouble(2),
+                    Stock = rdrProd.IsDBNull(3) ? 0 : rdrProd.GetDouble(3),
+                    GstRate = rdrProd.IsDBNull(4) ? 0 : rdrProd.GetDouble(4),
+                    BoxQuantity = rdrProd.IsDBNull(5) ? 0 : rdrProd.GetDouble(5),
+                    PurchasePrice = rdrProd.IsDBNull(6) ? 0 : rdrProd.GetDouble(6)
+                });
+            }
+        }
+        catch (Exception ex) { message = "Error loading data: " + ex.Message; }
+    }
+
+    private void OnProductSelected(ChangeEventArgs e)
+    {
+        if (int.TryParse(e.Value?.ToString(), out int prodId) && prodId > 0)
+        {
+            selectedProduct = products?.FirstOrDefault(p => p.Id == prodId);
+            if (selectedProduct != null)
+            {
+                selectedProductId = selectedProduct.Id;
+                currentSingleRate = selectedProduct.Rate; 
+                inputBoxes = 0;
+                inputPieces = 0;
+                CalculateTotalInputAmount();
+            }
+        }
+    }
+
+    private void CalculateTotalInputAmount()
+    {
+        if (selectedProduct == null) return;
+        double totalPcs = (inputBoxes * selectedProduct.BoxQuantity) + inputPieces;
+        double taxable = totalPcs * currentSingleRate;
+        calculatedItemAmount = taxable + (taxable * (selectedProduct.GstRate / 100));
+    }
+
+    private void AddItemToGrid()
+    {
+        if (selectedProductId <= 0 || selectedProduct == null) return;
+        if (inputBoxes == 0 && inputPieces == 0)
+        {
+            message = "कृपया बॉक्स या पीस की संख्या डालें!";
+            return;
+        }
+
+        invoiceItems.Add(new BillItem {
+            ProductId = selectedProduct.Id,
+            ProductName = selectedProduct.Name,
+            Boxes = inputBoxes,
+            Pieces = inputPieces,
+            BoxQuantity = selectedProduct.BoxQuantity,
+            SingleRate = currentSingleRate,
+            PurchasePrice = selectedProduct.PurchasePrice,
+            GstRate = selectedProduct.GstRate
+        });
+
+        inputBoxes = 0;
+        inputPieces = 0;
+        calculatedItemAmount = 0;
+        message = "";
+    }
+
+    private async Task SaveInvoice()
+    {
+        if (selectedPartyId <= 0 || invoiceItems.Count == 0)
+        {
+            message = "कृपया कस्टमर चुनें और बिल में कम से कम एक आइटम जोड़ें!";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(invoiceNumber))
+        {
+            message = "कृपया बिल नंबर लिखें!";
+            return;
+        }
+
+        using var conn = new NpgsqlConnection(connectionString);
+        await conn.OpenAsync();
+        
+        // डेटाबेस सुरक्षा के लिए ट्रांजैक्शन शुरू करें
+        using var trans = conn.BeginTransaction();
+
+        try
+        {
+            // 1. Main Invoice (invoices) टेबल में बिल हेड सेव करें
+            string invQuery = @"INSERT INTO invoices 
+                (invoicenumber, invoicedate, partyid, totalamount, isgst, totalprofit, paidamount) 
+                VALUES (@invoicenumber, @invoicedate, @partyid, @totalamount, @isgst, @totalprofit, @paidamount) 
+                RETURNING id;";
+            
+            int newInvoiceId = 0;
+            using (var cmd = new NpgsqlCommand(invQuery, conn, trans))
+            {
+                cmd.Parameters.AddWithValue("@invoicenumber", invoiceNumber);
+                cmd.Parameters.AddWithValue("@invoicedate", DateTime.Now);
+                cmd.Parameters.AddWithValue("@partyid", selectedPartyId);
+                cmd.Parameters.AddWithValue("@totalamount", grandTotal);
+                cmd.Parameters.AddWithValue("@isgst", grandGst > 0 ? 1 : 0);
+                cmd.Parameters.AddWithValue("@totalprofit", grandProfit);
+                cmd.Parameters.AddWithValue("@paidamount", paidAmount);
+                
+                newInvoiceId = Convert.ToInt32(await cmd.ExecuteScalarAsync());
+            }
+
+            // 2. ग्रिड का हर एक आइटम invoice_items में सेव करें और स्टॉक अपडेट करें
+            foreach (var item in invoiceItems)
+            {
+                // आइटम इंसर्ट क्वेरी
+                string itemQuery = @"INSERT INTO invoice_items 
+                    (invoiceid, productid, quantity, unit, rate, totalamount) 
+                    VALUES (@invoiceid, @productid, @quantity, @unit, @rate, @totalamount);";
+                
+                using (var cmdItem = new NpgsqlCommand(itemQuery, conn, trans))
+                {
+                    cmdItem.Parameters.AddWithValue("@invoiceid", newInvoiceId);
+                    cmdItem.Parameters.AddWithValue("@productid", item.ProductId);
+                    cmdItem.Parameters.AddWithValue("@quantity", item.TotalPieces); // कुल पीस सेव कर रहे हैं
+                    cmdItem.Parameters.AddWithValue("@unit", item.Boxes > 0 ? "Box" : "Piece");
+                    cmdItem.Parameters.AddWithValue("@rate", item.SingleRate);
+                    cmdItem.Parameters.AddWithValue("@totalamount", item.TotalAmount);
+                    
+                    await cmdItem.ExecuteNonQueryAsync();
+                }
+
+                // 3. स्टॉक अपडेट क्वेरी (products टेबल में से स्टॉक कम करना)
+                string stockQuery = "UPDATE products SET stock = stock - @qty WHERE id = @prodid;";
+                using (var cmdStock = new NpgsqlCommand(stockQuery, conn, trans))
+                {
+                    cmdStock.Parameters.AddWithValue("@qty", item.TotalPieces);
+                    cmdStock.Parameters.AddWithValue("@prodid", item.ProductId);
+                    
+                    await cmdStock.ExecuteNonQueryAsync();
+                }
+            }
+
+            // अगर सब कुछ बिना एरर के पूरा हो गया, तो डेटाबेस में पक्का (Commit) करें
+            await trans.CommitAsync();
+
+            message = $"🎉 बिल सफलतापूर्वक डेटाबेस में सेव हो गया है! बिल आईडी: {newInvoiceId}";
+            
+            // बिल बनने के बाद फॉर्म खाली करें और नया बिल नंबर जनरेट करें
+            invoiceItems.Clear();
+            selectedPartyId = 0;
+            paidAmount = 0;
+            invoiceNumber = "INV-" + DateTime.Now.ToString("ddMMyy-HHmmss");
+            
+            // स्टॉक की नई वैल्यू दिखाने के लिए ड्रॉपडाउन दोबारा लोड करें
+            await LoadDropdowns();
+        }
+        catch (Exception ex)
+        {
+            // अगर कोई भी गड़बड़ हुई, तो ट्रांजैक्शन रोलबैक हो जाएगा (डेटाबेस सुरक्षित रहेगा)
+            await trans.RollbackAsync();
+            message = "Error Saving Invoice: " + ex.Message;
+        }
+    }
+}

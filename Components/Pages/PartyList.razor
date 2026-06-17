@@ -1,0 +1,128 @@
+@page "/partylist"
+@rendermode InteractiveServer
+@using Npgsql
+
+<h3>Party Management</h3>
+
+<div style="background: #f3f3f3; padding: 15px; margin-bottom: 20px; border-radius: 5px;">
+    <h4>Add New Party</h4>
+    <div class="form-group" style="margin-bottom: 10px;">
+        <label>Party Name:</label>
+        <input type="text" class="form-control" @bind="newPartyName" placeholder="पार्टी का नाम लिखें..." />
+    </div>
+    <button class="btn btn-primary" @onclick="InsertParty">Save Party</button>
+</div>
+
+<h4>All Parties</h4>
+@if (parties == null)
+{
+    <p><em>डेटा लोड हो रहा है...</em></p>
+}
+else if (parties.Count == 0)
+{
+    <p>कोई पार्टी नहीं मिली। कृपया नई पार्टी जोड़ें।</p>
+}
+else
+{
+    <table class="table" border="1" cellpadding="5" style="border-collapse: collapse; width: 100%;">
+        <thead>
+            <tr style="background-color: #ddd;">
+                <th>ID</th>
+                <th>Party Name</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var party in parties)
+            {
+                <tr>
+                    <td>@party.Id</td>
+                    <td>@party.Name</td>
+                </tr>
+            }
+        </tbody>
+    </table>
+}
+
+@if (!string.IsNullOrEmpty(errorMessage))
+{
+    <div style="color: red; font-weight: bold; margin-top: 10px;">
+        @errorMessage
+    </div>
+}
+
+@code {
+    public class Party
+    {
+        public int Id { get; set; }
+        public string Name { get; set; }="";
+    }
+
+    private List<Party>? parties;
+    private string? errorMessage;
+    private string newPartyName = "";
+
+    private string connectionString = "Server=db.frhqmjirwjokopemtjol.supabase.co;Port=5432;Database=postgres;User Id=postgres;Password=aA1@VISHAL12;";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadParties();
+    }
+
+    // 1. डेटा लोड करने का फंक्शन
+    private async Task LoadParties()
+    {
+        try
+        {
+            parties = new List<Party>();
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // ध्यान दें: यहाँ 'parties' लिखा है क्योंकि इसी से आपका एरर हटा था
+            using var cmd = new NpgsqlCommand("SELECT id, name FROM parties ORDER BY id DESC", conn);
+            using var reader = await cmd.ExecuteReaderAsync();
+
+            while (await reader.ReadAsync())
+            {
+                parties.Add(new Party
+                {
+                    Id = reader.GetInt32(0),
+                    Name = reader.GetString(1)
+                });
+            }
+            errorMessage = ""; // पुराना एरर साफ़ करने के लिए
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Load Error: " + ex.Message;
+        }
+    }
+
+    // 2. नया डेटा डालने का फंक्शन
+    private async Task InsertParty()
+    {
+        if (string.IsNullOrWhiteSpace(newPartyName))
+        {
+            errorMessage = "कृपया पार्टी का नाम खाली न छोड़ें!";
+            return;
+        }
+
+        try
+        {
+            using var conn = new NpgsqlConnection(connectionString);
+            await conn.OpenAsync();
+
+            // डेटाबेस में नाम इन्सर्ट करने की क्वेरी
+            using var cmd = new NpgsqlCommand("INSERT INTO parties (\"name\") VALUES (@name)", conn);
+            cmd.Parameters.AddWithValue("@name", newPartyName);
+            await cmd.ExecuteNonQueryAsync();
+
+            // इनपुट बॉक्स खाली करें और लिस्ट दोबारा लोड करें
+            newPartyName = "";
+            await LoadParties();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "Insert Error: " + ex.Message;
+        }
+    }
+}
