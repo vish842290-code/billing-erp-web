@@ -5,7 +5,6 @@
 <h3>New Sale Invoice (बिक्री बिल)</h3>
 
 <div style="background: #f9f9f9; padding: 15px; margin-bottom: 20px; border-radius: 5px; border: 1px solid #ddd;">
-    <!-- 1. बिल हेडर डिटेल्स -->
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 15px; margin-bottom: 15px;">
         <div>
             <label style="font-weight: bold;">Select Customer / Party:</label>
@@ -32,7 +31,6 @@
 
     <hr />
 
-    <!-- 2. आइटम जोड़ने का सेक्शन -->
     <h4>Add Product to Bill</h4>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 10px;">
         <div style="grid-column: span 2;">
@@ -83,7 +81,6 @@
     }
 </div>
 
-<!-- 3. बिल का ग्रिड Table -->
 <h4>Invoice Items</h4>
 <table class="table" border="1" cellpadding="5" style="border-collapse: collapse; width: 100%; text-align: left; margin-bottom: 20px;">
     <thead>
@@ -115,7 +112,6 @@
     </tbody>
 </table>
 
-<!-- 4. बिल का फाइनल टोटल समरी -->
 <div style="text-align: right; font-size: 18px; font-weight: bold; background: #eef; padding: 15px; border-radius: 5px;">
     <div>Total Taxable: ₹@grandTaxable.ToString("F2")</div>
     <div>Total GST: ₹@grandGst.ToString("F2")</div>
@@ -142,7 +138,7 @@
         public double Stock { get; set; } 
         public double GstRate { get; set; } 
         public double BoxQuantity { get; set; } 
-        public double PurchasePrice { get; set; } // प्रॉफिट कैलकुलेशन के लिए
+        public double PurchasePrice { get; set; } 
     }
     
     public class BillItem
@@ -156,12 +152,10 @@
         public double PurchasePrice { get; set; }
         public double GstRate { get; set; }
         
-        public double TotalPieces => (Boxes * BoxQuantity) + Pieces;
+        public double TotalPieces => (Boxes * (BoxQuantity <= 0 ? 1 : BoxQuantity)) + Pieces;
         public double TaxableAmount => TotalPieces * SingleRate;
         public double GstAmount => TaxableAmount * (GstRate / 100);
         public double TotalAmount => TaxableAmount + GstAmount;
-        
-        // प्रॉफिट = (बिक्री रेट - खरीद रेट) * कुल पीस
         public double ItemProfit => (SingleRate - PurchasePrice) * TotalPieces;
     }
 
@@ -169,12 +163,10 @@
     private List<Product>? products;
     private List<BillItem> invoiceItems = new List<BillItem>();
 
-    // बिल हेडर वैरिएबल्स
     private int selectedPartyId = 0;
     private string invoiceNumber = "";
     private double paidAmount = 0;
 
-    // आइटम इनपुट वैरिएबल्स
     private int selectedProductId = 0;
     private Product? selectedProduct;
     private double currentSingleRate = 0;
@@ -192,7 +184,6 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // आज की तारीख के हिसाब से एक रैंडम बिल नंबर डिफ़ॉल्ट सेट कर देते हैं
         invoiceNumber = "INV-" + DateTime.Now.ToString("ddMMyy-HHmmss");
         await LoadDropdowns();
     }
@@ -214,19 +205,19 @@
             await rdrParty.CloseAsync();
 
             products = new List<Product>();
-            // यहाँ हमने प्रॉफिट निकालने के लिए purchaseprice भी लोड कर लिया है
-            using var cmdProd = new NpgsqlCommand("SELECT id, name, rate, stock, gstrate, boxquantity, purchaseprice FROM products ORDER BY name", conn);
+            // नई 'items' टेबल के हिसाब से कॉलम मैपिंग फिक्स कर दी गई है
+            using var cmdProd = new NpgsqlCommand("SELECT id, name, price, stock, purchase_price FROM items ORDER BY name", conn);
             using var rdrProd = await cmdProd.ExecuteReaderAsync();
             while (await rdrProd.ReadAsync())
             {
                 products.Add(new Product { 
                     Id = rdrProd.GetInt32(0), 
                     Name = rdrProd.IsDBNull(1) ? "" : rdrProd.GetString(1),
-                    Rate = rdrProd.IsDBNull(2) ? 0 : rdrProd.GetDouble(2),
-                    Stock = rdrProd.IsDBNull(3) ? 0 : rdrProd.GetDouble(3),
-                    GstRate = rdrProd.IsDBNull(4) ? 0 : rdrProd.GetDouble(4),
-                    BoxQuantity = rdrProd.IsDBNull(5) ? 0 : rdrProd.GetDouble(5),
-                    PurchasePrice = rdrProd.IsDBNull(6) ? 0 : rdrProd.GetDouble(6)
+                    Rate = rdrProd.IsDBNull(2) ? 0 : Convert.ToDouble(rdrProd.GetDecimal(2)),
+                    Stock = rdrProd.IsDBNull(3) ? 0 : rdrProd.GetInt32(3),
+                    GstRate = 0, // अभी डिफ़ॉल्ट 0, बाद में आइटम टेबल में कॉलम के अनुसार बदल सकते हैं
+                    BoxQuantity = 1, // डिफ़ॉल्ट 1 पीस प्रति बॉक्स
+                    PurchasePrice = rdrProd.IsDBNull(4) ? 0 : Convert.ToDouble(rdrProd.GetDecimal(4))
                 });
             }
         }
@@ -252,7 +243,8 @@
     private void CalculateTotalInputAmount()
     {
         if (selectedProduct == null) return;
-        double totalPcs = (inputBoxes * selectedProduct.BoxQuantity) + inputPieces;
+        double boxQty = selectedProduct.BoxQuantity <= 0 ? 1 : selectedProduct.BoxQuantity;
+        double totalPcs = (inputBoxes * boxQty) + inputPieces;
         double taxable = totalPcs * currentSingleRate;
         calculatedItemAmount = taxable + (taxable * (selectedProduct.GstRate / 100));
     }
@@ -271,7 +263,7 @@
             ProductName = selectedProduct.Name,
             Boxes = inputBoxes,
             Pieces = inputPieces,
-            BoxQuantity = selectedProduct.BoxQuantity,
+            BoxQuantity = selectedProduct.BoxQuantity <= 0 ? 1 : selectedProduct.BoxQuantity,
             SingleRate = currentSingleRate,
             PurchasePrice = selectedProduct.PurchasePrice,
             GstRate = selectedProduct.GstRate
@@ -299,16 +291,14 @@
 
         using var conn = new NpgsqlConnection(connectionString);
         await conn.OpenAsync();
-        
-        // डेटाबेस सुरक्षा के लिए ट्रांजैक्शन शुरू करें
         using var trans = conn.BeginTransaction();
 
         try
         {
-            // 1. Main Invoice (invoices) टेबल में बिल हेड सेव करें
+            // invoices टेबल में डेटा सेव करना
             string invQuery = @"INSERT INTO invoices 
-                (invoicenumber, invoicedate, partyid, totalamount, isgst, totalprofit, paidamount) 
-                VALUES (@invoicenumber, @invoicedate, @partyid, @totalamount, @isgst, @totalprofit, @paidamount) 
+                (invoicenumber, invoicedate, partyid, totalamount, paidamount) 
+                VALUES (@invoicenumber, @invoicedate, @partyid, @totalamount, @paidamount) 
                 RETURNING id;";
             
             int newInvoiceId = 0;
@@ -317,62 +307,53 @@
                 cmd.Parameters.AddWithValue("@invoicenumber", invoiceNumber);
                 cmd.Parameters.AddWithValue("@invoicedate", DateTime.Now);
                 cmd.Parameters.AddWithValue("@partyid", selectedPartyId);
-                cmd.Parameters.AddWithValue("@totalamount", grandTotal);
-                cmd.Parameters.AddWithValue("@isgst", grandGst > 0 ? 1 : 0);
-                cmd.Parameters.AddWithValue("@totalprofit", grandProfit);
-                cmd.Parameters.AddWithValue("@paidamount", paidAmount);
+                cmd.Parameters.AddWithValue("@totalamount", Convert.ToDecimal(grandTotal));
+                cmd.Parameters.AddWithValue("@paidamount", Convert.ToDecimal(paidAmount));
                 
                 newInvoiceId = Convert.ToInt32(await cmd.ExecuteScalarAsync());
             }
 
-            // 2. ग्रिड का हर एक आइटम invoice_items में सेव करें और स्टॉक अपडेट करें
+            // आइटम्स इंसर्ट करना और स्टॉक कम करना
             foreach (var item in invoiceItems)
             {
-                // आइटम इंसर्ट क्वेरी
                 string itemQuery = @"INSERT INTO invoice_items 
-                    (invoiceid, productid, quantity, unit, rate, totalamount) 
-                    VALUES (@invoiceid, @productid, @quantity, @unit, @rate, @totalamount);";
+                    (invoiceid, productid, quantity, rate, totalamount) 
+                    VALUES (@invoiceid, @productid, @quantity, @rate, @totalamount);";
                 
                 using (var cmdItem = new NpgsqlCommand(itemQuery, conn, trans))
                 {
                     cmdItem.Parameters.AddWithValue("@invoiceid", newInvoiceId);
                     cmdItem.Parameters.AddWithValue("@productid", item.ProductId);
-                    cmdItem.Parameters.AddWithValue("@quantity", item.TotalPieces); // कुल पीस सेव कर रहे हैं
-                    cmdItem.Parameters.AddWithValue("@unit", item.Boxes > 0 ? "Box" : "Piece");
-                    cmdItem.Parameters.AddWithValue("@rate", item.SingleRate);
-                    cmdItem.Parameters.AddWithValue("@totalamount", item.TotalAmount);
+                    cmdItem.Parameters.AddWithValue("@quantity", Convert.ToDecimal(item.TotalPieces));
+                    cmdItem.Parameters.AddWithValue("@rate", Convert.ToDecimal(item.SingleRate));
+                    cmdItem.Parameters.AddWithValue("@totalamount", Convert.ToDecimal(item.TotalAmount));
                     
                     await cmdItem.ExecuteNonQueryAsync();
                 }
 
-                // 3. स्टॉक अपडेट क्वेरी (products टेबल में से स्टॉक कम करना)
-                string stockQuery = "UPDATE products SET stock = stock - @qty WHERE id = @prodid;";
+                // 'items' टेबल का स्टॉक अपडेट करना
+                string stockQuery = "UPDATE items SET stock = stock - @qty WHERE id = @prodid;";
                 using (var cmdStock = new NpgsqlCommand(stockQuery, conn, trans))
                 {
-                    cmdStock.Parameters.AddWithValue("@qty", item.TotalPieces);
+                    cmdStock.Parameters.AddWithValue("@qty", Convert.ToInt32(item.TotalPieces));
                     cmdStock.Parameters.AddWithValue("@prodid", item.ProductId);
                     
                     await cmdStock.ExecuteNonQueryAsync();
                 }
             }
 
-            // अगर सब कुछ बिना एरर के पूरा हो गया, तो डेटाबेस में पक्का (Commit) करें
             await trans.CommitAsync();
 
-            message = $"🎉 बिल सफलतापूर्वक डेटाबेस में सेव हो गया है! बिल आईडी: {newInvoiceId}";
-            
-            // बिल बनने के बाद फॉर्म खाली करें और नया बिल नंबर जनरेट करें
+            message = $"🎉 बिल सफलतापूर्वक सेव हो गया! बिल नंबर: {invoiceNumber}";
             invoiceItems.Clear();
             selectedPartyId = 0;
             paidAmount = 0;
             invoiceNumber = "INV-" + DateTime.Now.ToString("ddMMyy-HHmmss");
             
-            // स्टॉक की नई वैल्यू दिखाने के लिए ड्रॉपडाउन दोबारा लोड करें
             await LoadDropdowns();
         }
         catch (Exception ex)
         {
-            // अगर कोई भी गड़बड़ हुई, तो ट्रांजैक्शन रोलबैक हो जाएगा (डेटाबेस सुरक्षित रहेगा)
             await trans.RollbackAsync();
             message = "Error Saving Invoice: " + ex.Message;
         }
