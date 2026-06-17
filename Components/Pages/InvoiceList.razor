@@ -168,7 +168,7 @@ else
     private string savedGstin = "";
 
     private string? errorMessage;
-    private string connectionString = "Server=db.frhqmjirwjokopemtjol.supabase.co;Port=6543;Database=postgres;User Id=postgres;Password=aA1@VISHAL12;";
+    private string connectionString = Environment.GetEnvironmentVariable("DB_CONNECTION") ?? "Server=aws-1-ap-south-1.pooler.supabase.com;Port=6543;Database=postgres;User Id=postgres.frhqmjirwjokopemtjol;Password=aA1@VISHAL12;";
 
     protected override async Task OnInitializedAsync()
     {
